@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Linq.Expressions;
+using System.Reflection;
 using System.Text;
 using Manager.DataAccessLayer.Core;
 
@@ -8,68 +10,84 @@ namespace Manager.DataAccessLayer.SqlClient.Helpers
 {
     public class QueryGenerator<T> where T : class, new()
     {
+        private List<WhereConditions> AllConditions { get; set; }
+        private string TableName { get; set; }
+        private QueryTypes SelectedQueryType { get; set; }
 
-        public static string GenerateSelectQuery(string tableName = null)
+        public QueryGenerator(QueryTypes type, string tableName = null)
         {
-            StringBuilder query = new StringBuilder();
-
-            query.AppendFormat("SELECT {0} FROM {1}",
-                        string.IsNullOrEmpty(tableName) ? typeof(T).Name : tableName,
-                        GetObjectColumns());
-            return query.ToString();
+            AllConditions = new List<WhereConditions>();
+            SelectedQueryType = type;
+            TableName = string.IsNullOrEmpty(tableName) ? typeof(T).Name : tableName;
         }
 
-        public static string GenerateUpdateQuery(T obj, string tableName = null)
+        #region Where Functions
+
+        public QueryGenerator<T> Where(string propertyName, ConditionTypes type, string condition) //where TProperty : struct
         {
-            StringBuilder query = new StringBuilder();
+            if (string.IsNullOrEmpty(propertyName))
+                throw new NullReferenceException(propertyName);
+            if (string.IsNullOrEmpty(propertyName))
+                throw new NullReferenceException(condition);
 
-            query.AppendFormat("UPDATE {0} SET {1}",
-                string.IsNullOrEmpty(tableName) ? typeof(T).Name : tableName,
-                GetObjectColumnsVal(obj));
-
-            return query.ToString();
+            WhereConditions cond = new WhereConditions();
+            cond.PropertyName = propertyName;
+            cond.QueryCond = type;
+            cond.Condition = condition;
+            AllConditions.Add(cond);
+            return this;
         }
 
-        public static string GenerateDeleteQuery(Expression<Func<T, bool>> expression ,string tableName = null)
+        #endregion
+        // select de * yerıne gelecek sey update ile baglanılır mı dusun
+        private QueryGenerator<T> AddField()
         {
-            StringBuilder query = new StringBuilder();
-
-            query.AppendFormat("DELETE {0} WHERE {1}",
-                string.IsNullOrEmpty(tableName) ? typeof(T).Name : tableName,
-                ExpressionConvertWhereQuery(expression.Simplify().ToString()));//todo burada kaldın buna bak calısacak mı
-
-            return query.ToString();
+            return this;
         }
 
-        private static string ExpressionConvertWhereQuery(string expressionString)
+        private string WhereConditionsGet()
         {
-            return "";
+            List<string> condList = new List<string>();
+            foreach (WhereConditions cond in AllConditions)
+            {
+                string queryOperator = " = ";
+                if (cond.QueryCond == ConditionTypes.Equals || cond.QueryCond == ConditionTypes.NotEquals)
+                    queryOperator = (cond.QueryCond == ConditionTypes.NotLike ? " != " : " = ");
+                else if (cond.QueryCond == ConditionTypes.Like || cond.QueryCond == ConditionTypes.NotLike)
+                    queryOperator = (cond.QueryCond == ConditionTypes.NotLike ? " NOT " : string.Empty) + " LIKE ";
+
+                condList.Add($"{cond.PropertyName} {queryOperator} '{cond.Condition}'");
+            }
+
+            return (condList.Count > 0 ? " WHERE " + string.Join(" AND ", condList) : string.Empty);
         }
 
-        public static string GetObjectColumns()
+        public string BuildQuery()
         {
-            StringBuilder query = new StringBuilder();
-            foreach (System.Reflection.PropertyInfo prop in typeof(T).GetProperties(System.Reflection.BindingFlags.Public))
-                if (prop.CanRead)
-                    query.Append(prop.Name);
-            return query.ToString();
-        }
+            string template = SelectedQueryType switch
+            {
+                QueryTypes.Select => QueryTypeFormats.SelectFormat,
+                QueryTypes.Update => QueryTypeFormats.UpdateFormat,
+                QueryTypes.Delete => QueryTypeFormats.DeleteFormat,
+                _ => throw new Exception("Sorgu tipi tespit edilemedi.")
+            };
 
-        public static string GetObjectColumnsVal(T obj)
-        {
-            StringBuilder query = new StringBuilder();
-            foreach (System.Reflection.PropertyInfo prop in typeof(T).GetProperties(System.Reflection.BindingFlags.Public))
-                if (prop.CanRead && prop.CanWrite)
-                {
-                    string val = GetPropValue(obj, prop.Name) == null ? "NULL" : (string)GetPropValue(obj, prop.Name);
-                    query.AppendFormat("{0} = {1}", prop.Name, val);
-                }
-            return query.ToString();
-        }
+            string queryFrontTemplate = "";
 
-        public static object GetPropValue(T obj, string propName)
-        {
-            return typeof(T).GetProperty(propName)?.GetValue(obj, null);
+            if (SelectedQueryType == QueryTypes.Select)
+            {
+                queryFrontTemplate = string.Format(template, TableName);
+            }
+            else if (SelectedQueryType == QueryTypes.Update)
+            {
+                queryFrontTemplate = string.Format(template, TableName);
+            }
+            else if (SelectedQueryType == QueryTypes.Delete)
+            {
+                queryFrontTemplate = string.Format(template, TableName);
+            }
+
+            return queryFrontTemplate + WhereConditionsGet();
         }
     }
 }
