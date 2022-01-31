@@ -6,8 +6,8 @@ namespace Manager.DataAccessLayer.SqlClient.Helpers
 {
     public static class QueryTypeFormats
     {
-        public static string SelectFormat => "SELECT * FROM {1} ";
-        public static string UpdateFormat => "UPDATE {0} SET {1} ";
-        public static string DeleteFormat => "DELETE {0} ";
+        public static string SelectFormat => $"SELECT {FormatTypes.Fields} FROM {FormatTypes.TableName} ";
+        public static string UpdateFormat => $"UPDATE {FormatTypes.TableName} SET {FormatTypes.Fields} ";
+        public static string DeleteFormat => $"DELETE FROM {FormatTypes.TableName} ";
     }
 }
